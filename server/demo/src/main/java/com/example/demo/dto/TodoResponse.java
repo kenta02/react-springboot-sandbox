@@ -11,9 +11,9 @@ public class TodoResponse {
     /**
      * 変換済みTodoを生成する。
      *
-     * @param id ID
+     * @param id    ID
      * @param title タスク名
-     * @param done 完了状態
+     * @param done  完了状態
      */
     public TodoResponse(Long id, String title, boolean done) {
         this.id = id;
