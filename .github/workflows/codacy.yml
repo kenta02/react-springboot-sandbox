@@ -1,0 +1,86 @@
+name: Codacy Coverage Upload
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  upload-coverage:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Detect backend directory
+        id: backend-check
+        run: |
+          if [ -d backend ]; then
+            echo "backend=backend" >> $GITHUB_OUTPUT
+          elif [ -d server ]; then
+            echo "backend=server" >> $GITHUB_OUTPUT
+          else
+            echo "backend=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detect frontend directory
+        id: frontend-check
+        run: |
+          if [ -d frontend ]; then
+            echo "frontend=frontend" >> $GITHUB_OUTPUT
+          elif [ -d client ]; then
+            echo "frontend=client" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload backend coverage to Codacy
+        if: steps.backend-check.outputs.backend != 'none' && env.CODACY_PROJECT_TOKEN != ''
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        run: |
+          cd ${{ steps.backend-check.outputs.backend }}
+          if [ -f mvnw ]; then
+            ./mvnw clean test
+          elif [ -f gradlew ]; then
+            ./gradlew clean test
+          else
+            echo "No Maven/Gradle wrapper found for backend. Skipping backend coverage upload."
+            exit 0
+          fi
+
+          if [ -f coverage/lcov.info ]; then
+            npm install --no-save @codacy/codacy-coverage-reporter
+            npx @codacy/codacy-coverage-reporter report --project-token "$CODACY_PROJECT_TOKEN" --coverage-file coverage/lcov.info --commit ${{ github.sha }} --branch ${{ github.ref_name }}
+          else
+            echo "No coverage/lcov.info for backend; skipping backend Codacy upload."
+          fi
+
+      - name: Upload frontend coverage to Codacy
+        if: steps.frontend-check.outputs.frontend != 'none' && env.CODACY_PROJECT_TOKEN != ''
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        run: |
+          cd ${{ steps.frontend-check.outputs.frontend }}
+          npm ci
+          npm run coverage --if-present || true
+
+          if [ -f coverage/lcov.info ]; then
+            npm install --no-save @codacy/codacy-coverage-reporter
+            npx @codacy/codacy-coverage-reporter report --project-token "$CODACY_PROJECT_TOKEN" --coverage-file coverage/lcov.info --commit ${{ github.sha }} --branch ${{ github.ref_name }}
+          else
+            echo "No coverage/lcov.info for frontend; skipping frontend Codacy upload."
+          fi
+
+      - name: Skip Codacy coverage upload
+        if: steps.backend-check.outputs.backend == 'none' && steps.frontend-check.outputs.frontend == 'none'
+        run: echo "No backend/frontend directories found; skipping Codacy upload."

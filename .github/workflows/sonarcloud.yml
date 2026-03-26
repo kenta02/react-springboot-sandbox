@@ -1,0 +1,86 @@
+name: SonarCloud Analysis
+
+on: workflow_dispatch
+
+jobs:
+  sonarcloud:
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    strategy:
+      matrix:
+        node-version: [24]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Detect backend directory
+        id: backend-check
+        run: |
+          if [ -d backend ]; then
+            echo "backend=backend" >> $GITHUB_OUTPUT
+          elif [ -d server ]; then
+            echo "backend=server" >> $GITHUB_OUTPUT
+          else
+            echo "backend=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detect frontend directory
+        id: frontend-check
+        run: |
+          if [ -d frontend ]; then
+            echo "frontend=frontend" >> $GITHUB_OUTPUT
+          elif [ -d client ]; then
+            echo "frontend=client" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate SonarCloud configuration
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "SONAR_TOKEN is not configured for this repository."
+            echo "Add SONAR_TOKEN to GitHub Actions secrets before running SonarCloud analysis."
+            exit 1
+          fi
+
+      - name: Build backend (if present)
+        if: steps.backend-check.outputs.backend != 'none'
+        run: |
+          cd ${{ steps.backend-check.outputs.backend }}
+          if [ -f mvnw ]; then
+            ./mvnw clean test
+          elif [ -f gradlew ]; then
+            ./gradlew clean test
+          else
+            echo "No Maven/Gradle wrapper found for backend. Skipping backend build."
+          fi
+
+      - name: Build frontend (if present)
+        if: steps.frontend-check.outputs.frontend != 'none'
+        run: |
+          cd ${{ steps.frontend-check.outputs.frontend }}
+          npm ci
+          npm run build --if-present
+
+      - name: SonarCloud Scan
+        run: |
+          if [ -f sonar-project.properties ]; then
+            echo "Running SonarCloud scan via sonar-project.properties"
+            sonar-scanner -Dsonar.login="$SONAR_TOKEN"
+          else
+            echo "sonar-project.properties not found; ensure project config exists before running SonarCloud scan."
+            exit 0
+          fi
+
+      - name: Skip SonarCloud run
+        if: steps.backend-check.outputs.backend == 'none' && steps.frontend-check.outputs.frontend == 'none'
+        run: echo "No backend/frontend directories found; skipping SonarCloud scan."

@@ -1,0 +1,46 @@
+name: SonarCloud Issues Sync
+
+on: workflow_dispatch
+
+jobs:
+  sync-issues:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify script exists
+        id: verify-script
+        run: |
+          if [ -f scripts/sync-sonarcloud-issues.js ]; then
+            echo "script_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "script_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run SonarCloud Issues Sync
+        if: steps.verify-script.outputs.script_exists == 'true'
+        run: node scripts/sync-sonarcloud-issues.js
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+          GH_REPO: ${{ github.repository }}
+
+      - name: Skip SonarCloud Issues Sync if script missing
+        if: steps.verify-script.outputs.script_exists == 'false'
+        run: echo "scripts/sync-sonarcloud-issues.js not found, skipping SonarCloud issues sync."
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "⚠️ SonarCloud Issues Sync failed: see workflow logs"
+          # workflow_run トリガーでは context.issue が存在しないため
+          # GitHub API 経由でコメントを付けようとすると 404 になる。
+          # 必要ならここで Slack 等外部通知を呼ぶ。
