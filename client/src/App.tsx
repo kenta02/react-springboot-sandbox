@@ -1,0 +1,97 @@
+import { useEffect, useState } from "react";
+import { getTodos, createTodo, updateTodo, deleteTodo } from "./api/todos";
+import "./App.css";
+
+type Todo = {
+  id: number;
+  title: string;
+  done: boolean;
+};
+
+function App() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const result = await getTodos();
+      if (!Array.isArray(result)) {
+        console.warn("getTodos returned non-array", result);
+        setTodos([]);
+        setError("Unexpected API response format");
+        return;
+      }
+      setTodos(result);
+      setError(null);
+    } catch {
+      setTodos([]);
+      setError("Failed to load todos");
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const onSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    try {
+      await createTodo(title);
+      setTitle("");
+      load();
+      setError(null);
+    } catch {
+      setError("Create failed");
+    }
+  };
+
+  const onToggle = async (todo: Todo) => {
+    try {
+      await updateTodo(todo.id, todo.title);
+      load();
+      setError(null);
+    } catch {
+      setError("Update failed");
+    }
+  };
+
+  const onDelete = async (id: number) => {
+    try {
+      await deleteTodo(id);
+      load();
+      setError(null);
+    } catch {
+      setError("Delete failed");
+    }
+  };
+
+  return (
+    <div className="container">
+      <h1>Todo List</h1>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      <form onSubmit={onSubmit}>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="New todo"
+        />
+        <button type="submit">Add</button>
+      </form>
+      <ul>
+        {(Array.isArray(todos) ? todos : []).map((todo) => (
+          <li key={todo.id}>
+            <span>{todo.title}</span>
+            <button onClick={() => onToggle(todo)}>
+              {todo.done ? "Undo" : "Done"}
+            </button>
+            <button onClick={() => onDelete(todo.id)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default App;
