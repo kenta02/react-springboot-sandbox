@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { getTodos, createTodo, updateTodo, deleteTodo } from "./api/todos";
+import {
+  getTodos,
+  createTodo,
+  updateTodo,
+  deleteTodo,
+  Todo,
+} from "./api/todos";
 import "./App.css";
-
-type Todo = {
-  id: number;
-  title: string;
-  done: boolean;
-};
 
 function App() {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -34,19 +34,21 @@ function App() {
     load();
   }, []);
 
+  // フォーム送信: 新規Todoを追加
   const onSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim()) return; // 空文字は無視
     try {
       await createTodo(title);
       setTitle("");
-      load();
+      load(); // 一覧再取得
       setError(null);
     } catch {
       setError("Create failed");
     }
   };
 
+  // Todo完了状態をトグル（今回セットではなくAPI想定）
   const onToggle = async (todo: Todo) => {
     try {
       await updateTodo(todo.id, todo.title);
@@ -57,6 +59,7 @@ function App() {
     }
   };
 
+  // Todo削除
   const onDelete = async (id: number) => {
     try {
       await deleteTodo(id);
